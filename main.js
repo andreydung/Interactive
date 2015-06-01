@@ -6,14 +6,14 @@ var controller = (function () {
   var distPath = "images/STSIM.csv";
   
   var listimage;
-  var N_TOTAL = 10;
-
   var label = [];
 
   var pool;
   var pressAllowed = true;
 
   var Pool = function(N) {
+    // a class to store accessed image, 
+    // and efficiently get random index
     this.N = N;
     this.N_not_seen = N - 1;
     this.pool = [];
@@ -27,7 +27,7 @@ var controller = (function () {
       if (this.N_not_seen < 0)
         return -1;
 
-      var random = getRandomfromRange(0, N_TOTAL-1);
+      var random = getRandomfromRange(0, this.N_not_seen);
 
       //swap with the end
       var tmp = this.pool[random];
@@ -38,6 +38,9 @@ var controller = (function () {
     }
     this.getNSeen = function(){
       return this.N - this.N_not_seen - 1;
+    }
+    this.getNTotal = function(){
+      return this.N;
     }
   }
 
@@ -67,13 +70,13 @@ var controller = (function () {
     // Record labels
     divBatch.map(function() {
       var id = $(this).find("img").attr("id");
-      var label = $(this).find("input").attr("value");
+      var label = $(this).find("input:radio:checked").val();
       console.log(id + ":" + label);
       label[id] = label;
     })
 
     console.log("You have seen: " + pool.getNSeen());
-    $("#labelTrue").text(pool.getNSeen() + "/" + N_TOTAL);
+    $("#labelTrue").text("You have labeled: " + pool.getNSeen() + "/" + pool.getNTotal());
 
     // Shuffle
     $.each(divBatch, function() {
@@ -84,13 +87,12 @@ var controller = (function () {
         $("#buttonSubmit").css('display', 'inline');
         return;
       }
-
       $(this).find("img").attr({"src": folderPath.concat(listimage[tmp]),
                       "id": tmp})
     })
 
     $('#main input[type=radio]').attr('checked', false);
-    }
+    
   }
 
   return {
@@ -99,7 +101,9 @@ var controller = (function () {
       // Ajax request to read textfile
       $.get(listPath, function(data){
         listimage = data.split("\n");
-        // N_TOTAL = listimage.length;
+        
+        //var N_TOTAL = listimage.length;
+        var N_TOTAL = 30;
 
         pool = new Pool(N_TOTAL);
         label = initializeArray(0, N_TOTAL);
@@ -116,27 +120,41 @@ var controller = (function () {
                 src: folderPath.concat(listimage[tmp]),
                 id:  tmp
               }),
+
               '<br>',
-              $("<input />", {
-                type:   "radio",
-                name:   "label" + tmp,
-                value:  "1",
-              }),
-              $("<label>").text("Natural"),
+
+              $("<label>").attr({
+                class: "radio",
+              }).text("Natural").append(     
+                $("<input />", {
+                  type:   "radio",
+                  name:   "label" + tmp,
+                  value:  "1",
+                })),
+
               '<br>',
-              $("<input />", {
-                type:   "radio",
-                name:   "label" + tmp,
-                value:  "2",
-              }),
-              $("<label>").text("Manmade"),
+
+              $("<label>").attr({
+                class: "radio",
+              }).text("Manmade").append(
+                $("<input />", {
+                  type:   "radio",
+                  name:   "label" + tmp,
+                  value:  "2",
+                })
+              ),
+
               '<br>',
-              $("<input />", {
-                type:   "radio",
-                name:   "label" + tmp,
-                value:  "3",
-              }),
-              $("<label>").text("Mixed")
+
+              $("<label>").attr({
+                class: "radio",
+              }).text("Mixed").append(
+                $("<input />", {
+                  type:   "radio",
+                  name:   "label" + tmp,
+                  value:  "3"
+                })
+              )
             )
           )
         };
