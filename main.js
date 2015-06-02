@@ -10,39 +10,70 @@ var controller = (function () {
 
   var pool;
   var pressAllowed = true;
+  var N_TOTAL;
 
   var Pool = function(N) {
     // a class to store accessed image, 
-    // and efficiently get random index
-    this.N = N;
-    this.N_not_seen = N - 1;
-    this.pool = [];
+    // and efficiently get random index and delete
+    this.N = 0;  // length of array
+    this.a = []; // array store value
+    this.H = {}; // store mapping from value -> index
 
     for (var i = 0; i < N; i++) {
-      this.pool.push(i);
-    }
-
-    this.getRandom = function() {
-      // get and delete a random element from the Pool
-      if (this.N_not_seen < 0)
-        return -1;
-
-      var random = getRandomfromRange(0, this.N_not_seen);
-
-      //swap with the end
-      var tmp = this.pool[random];
-      this.pool[random] = this.pool[this.N_not_seen];
-      this.N_not_seen = this.N_not_seen - 1;
-
-      return tmp;
-    }
-    this.getNSeen = function(){
-      return this.N - this.N_not_seen - 1;
-    }
-    this.getNTotal = function(){
-      return this.N;
+      this.insert(i);
     }
   }
+
+  Pool.prototype.insert = function(value) {
+    this.a.push(value);
+    this.H[value] = this.N;
+    this.N = this.N + 1;
+  }
+
+  Pool.prototype.getRandom = function() {
+    // get a random element from the Pool
+    if (this.N == 0)
+      return -1;
+
+    var random = getRandomfromRange(0, this.N -1);
+    console.log("index:" + random)
+    return this.a[random];
+  }
+
+  Pool.prototype.getRandomAndRemove = function() {
+    var value = this.getRandom();
+    if (value < 0)
+      return;
+    this.remove(value);
+    return value;
+  }
+
+  Pool.prototype.contains = function(value){
+    return (value in this.H)
+  }
+
+  Pool.prototype.remove = function(value){
+    // move last element to replace current element
+    if (!this.contains(value)) {
+      console.log(value);
+      throw new Error("Value doesn't exist in the database");
+      return;
+    }
+
+    var index = this.H[value]
+    this.H[this.a[this.N - 1]] = index
+    delete this.H[value]
+
+    //swap
+    var tmp = this.a[index]
+    this.a[index] = this.a[this.N - 1]
+    this.N = this.N - 1
+  }
+
+  Pool.prototype.getNremain = function(){
+    return this.N;
+  }
+  
 
   function initializeArray(value, len) {
     // initialize an array of len with value
@@ -58,11 +89,7 @@ var controller = (function () {
   }
 
   function submit() {
-    // $('<form> <input type="text" style="z-index:10000" name="name"> <br> </form>').dialog({modal:true});
-
     var name = prompt("Please enter your name");
-
-    console.log(name);
 
     var Label = Parse.Object.extend("Label");
     var result = new Label();
@@ -72,7 +99,7 @@ var controller = (function () {
     result.save(null, {
       success : function(result) {
         console.log("Success");
-        alert("Stored data sucessfully!");
+        alert("Stored data sucessfully! Thank you for your participation!");
         location.reload();
       },
       error: function(result, error) {
@@ -100,12 +127,13 @@ var controller = (function () {
       localStorage.setItem("labels", tmp.concat(id + "," + label + "\n"));
     })
 
-    console.log("You have seen: " + pool.getNSeen());
-    $("#labelTrue").text("You have labeled: " + pool.getNSeen() + "/" + pool.getNTotal());
+    var Nseen = N_TOTAL - pool.getNremain();
+    console.log("You have seen: " + NSeen);
+    $("#labelTrue").text("You have labeled: " + NSeen + "/" + N_TOTAL);
 
     // Shuffle
     $.each(divBatch, function() {
-      var tmp = pool.getRandom();
+      var tmp = pool.getRandomAndRemove();
       console.log(tmp);
       if (tmp < 0) {
         $("#buttonNext").prop("disabled", true);
@@ -131,14 +159,20 @@ var controller = (function () {
         listimage = data.split("\n");
         
         //var N_TOTAL = listimage.length;
-        var N_TOTAL = 10;
+        N_TOTAL = 15;
 
         pool = new Pool(N_TOTAL);
         label = initializeArray(0, N_TOTAL);
 
+        while (pool.getNremain() > 0) {
+          console.log("hello world!");
+          console.log(pool.getRandomAndRemove());
+          console.log("N: " + pool.getNremain());
+        }
+
         // Setup UI
         for (i = 0; i < N_BATCH; i++) {
-          var tmp = pool.getRandom();
+          var tmp = pool.getRandomAndRemove();
           if (tmp < 0)
             return;
 
