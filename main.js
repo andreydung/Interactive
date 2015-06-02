@@ -57,7 +57,29 @@ var controller = (function () {
     return Math.round(Math.random() * (max - min) + min);
   }
 
-  function Submit() {
+  function submit() {
+    // $('<form> <input type="text" style="z-index:10000" name="name"> <br> </form>').dialog({modal:true});
+
+    var name = prompt("Please enter your name");
+
+    console.log(name);
+
+    var Label = Parse.Object.extend("Label");
+    var result = new Label();
+    result.set("labels", localStorage.getItem("labels"));
+    result.set("name", name);
+
+    result.save(null, {
+      success : function(result) {
+        console.log("Success");
+        alert("Stored data sucessfully!");
+        location.reload();
+      },
+      error: function(result, error) {
+        console.log("Failure");
+        alert("Error submitting data, error code:" + error.message);
+      }
+    });
   }
 
   function Next() {
@@ -73,6 +95,9 @@ var controller = (function () {
       var label = $(this).find("input:radio:checked").val();
       console.log(id + ":" + label);
       label[id] = label;
+
+      var tmp = localStorage.getItem("labels");
+      localStorage.setItem("labels", tmp.concat(id + "," + label + "\n"));
     })
 
     console.log("You have seen: " + pool.getNSeen());
@@ -98,12 +123,15 @@ var controller = (function () {
   return {
     init: function() {
 
+      localStorage.clear();
+      localStorage.setItem("labels","");
+
       // Ajax request to read textfile
       $.get(listPath, function(data){
         listimage = data.split("\n");
         
         //var N_TOTAL = listimage.length;
-        var N_TOTAL = 30;
+        var N_TOTAL = 10;
 
         pool = new Pool(N_TOTAL);
         label = initializeArray(0, N_TOTAL);
@@ -161,6 +189,8 @@ var controller = (function () {
       })
       
       $("#buttonNext").on("click", Next);
+      $("#buttonSubmit").on("click", submit);
+
       $(window).keypress(function(e) {
         e.preventDefault();
         if (pressAllowed) {
@@ -174,7 +204,18 @@ var controller = (function () {
       $(window).keyup(function(e) {
         e.preventDefault();
         pressAllowed = true;
-      });   
+      }); 
+
+      Parse.initialize("q11aUUt7JFAjjr3vSHnCDUVi7xFDx0vYWTkGR4gA", "fR1i3W3vDMLkFCFqC57IFb0lP3Uc73whNPJhKz1w");
+    
+      // var TestObject = Parse.Object.extend("TestObject");
+      // var testObject = new TestObject();
+      // testObject.save({asdfasdf: "storing data file"}, {
+      //   success: function(object) {
+      //     alert("yay! it worked");
+      //   }
+      // });
+
     }
   }
 }) ();
