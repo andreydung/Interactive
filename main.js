@@ -1,17 +1,20 @@
 var controller = (function () {
 
-  var N_BATCH = 5;
+  var N_BATCH = 10;
   var folderPath = "images/full/";
   var listPath = "images/list.txt";
-  var distPath = "images/STSIM.csv";
+  var distPath = "images/graph_0.80.txt";
+
+  var Niter = 0;
   
   var listimage;
-  var label = [];
+  var label;
 
   var pool;
   var pressAllowed = true;
   var N_TOTAL;
 
+  // ====================== Pool data structure ======================
   var Pool = function(N) {
     // a class to store accessed image, 
     // and efficiently get random index and delete
@@ -36,14 +39,13 @@ var controller = (function () {
       return -1;
 
     var random = getRandomfromRange(0, this.N -1);
-    console.log("index:" + random)
     return this.a[random];
   }
 
   Pool.prototype.getRandomAndRemove = function() {
     var value = this.getRandom();
     if (value < 0)
-      return;
+      return -1;
     this.remove(value);
     return value;
   }
@@ -55,8 +57,7 @@ var controller = (function () {
   Pool.prototype.remove = function(value){
     // move last element to replace current element
     if (!this.contains(value)) {
-      console.log(value);
-      throw new Error("Value doesn't exist in the database");
+      //throw new Error("Value doesn't exist in the database");
       return;
     }
 
@@ -73,7 +74,53 @@ var controller = (function () {
   Pool.prototype.getNremain = function(){
     return this.N;
   }
-  
+  // ========================= Label data structure ========================
+  var Label = function(N, neighbors) {
+    this.a = initializeArray(-1, N); // store the label
+    this.Ndepth = 3
+    this.adjacent = neighbors // undirected graph from nearest neighbors
+    this.Nlabeled = 0
+  }
+
+  Label.prototype.put = function(key, label) {
+    if (this.a[key] > 0)
+      return;
+
+    // Breadth First Search
+    var queue = [];
+    var depthQ = []; // queue to store depth, avoid using tuple in JS
+    
+    queue.push(key)
+    depthQ.push(1)
+
+    while(queue.length > 0) {
+      var node = queue.shift()
+      var depth = depthQ.shift()
+
+      if (depth < this.Ndepth && this.a[node] < 0) {
+        this.a[node] = label;
+        this.Nlabeled = this.Nlabeled + 1;
+        pool.remove(node);
+
+        for (var j = 0; j < this.adjacent[node].length; j++) {
+          var n = this.adjacent[node][j];
+          if (this.a[n] < 0) {
+            queue.push(n);
+            depthQ.push(depth + 1);
+          }
+        }
+      }
+    }
+  }
+
+  Label.prototype.getLabel = function() {
+    return this.a;
+  }
+
+  Label.prototype.getN = function() {
+    return this.Nlabeled;
+  }
+  // ==================================================================
 
   function initializeArray(value, len) {
     // initialize an array of len with value
@@ -91,10 +138,13 @@ var controller = (function () {
   function submit() {
     var name = prompt("Please enter your name");
 
-    var Label = Parse.Object.extend("Label");
-    var result = new Label();
-    result.set("labels", localStorage.getItem("labels"));
-    result.set("name", name);
+    var Result = Parse.Object.extend("Result");
+    var result = new Result();
+    result.set("selection", localStorage.getItem("labels"));
+    result.set("iterativeLabels", localStorage.getItem("fullLabels"));
+    result.set("final", label.getLabel());
+    result.set("user", name);
+    result.set("effort", Niter);
 
     result.save(null, {
       success : function(result) {
@@ -119,29 +169,41 @@ var controller = (function () {
     // Record labels
     divBatch.map(function() {
       var id = $(this).find("img").attr("id");
-      var label = $(this).find("input:radio:checked").val();
-      console.log(id + ":" + label);
-      label[id] = label;
+      var l = $(this).find("input:radio:checked").val();
+      console.log(id + ":" + l);
+      label.put(id, l);
 
       var tmp = localStorage.getItem("labels");
-      localStorage.setItem("labels", tmp.concat(id + "," + label + "\n"));
+      localStorage.setItem("labels", tmp.concat(id + "," + l + "\n"));
+
     })
 
-    var Nseen = N_TOTAL - pool.getNremain();
-    console.log("You have seen: " + NSeen);
-    $("#labelTrue").text("You have labeled: " + NSeen + "/" + N_TOTAL);
+    var tmp = localStorage.getItem("fullLabels");
+    console.log(tmp.concat(Niter + ":" + label.getLabel() + " "));
+    localStorage.setItem("fullLabels", tmp.concat(Niter + ":" + label.getLabel() + "\n"))
+
+    Niter = Niter + 1;
+
+    $("#labelTrue").text("You have labeled: " + Niter * N_BATCH);
+    $("#labelPropagation").text("After STSIM propagation: " + label.getN())
+
+    if (label.getN() == N_TOTAL || pool.getNremain() <= 0) {
+      $("#buttonNext").prop("disabled", true);
+      $("#buttonSubmit").css('display', 'inline');
+      return;
+    }
 
     // Shuffle
     $.each(divBatch, function() {
       var tmp = pool.getRandomAndRemove();
       console.log(tmp);
       if (tmp < 0) {
-        $("#buttonNext").prop("disabled", true);
-        $("#buttonSubmit").css('display', 'inline');
-        return;
+        $(this).remove();
       }
-      $(this).find("img").attr({"src": folderPath.concat(listimage[tmp]),
-                      "id": tmp})
+      else {
+        $(this).find("img").attr({"src": folderPath.concat(listimage[tmp]),
+                        "id": tmp})
+      }
     })
 
     $('#main input[type=radio]').attr('checked', false);
@@ -153,25 +215,22 @@ var controller = (function () {
 
       localStorage.clear();
       localStorage.setItem("labels","");
+      localStorage.setItem("fullLabels","");
 
-      // Ajax request to read textfile
-      $.get(listPath, function(data){
-        listimage = data.split("\n");
+      $.when($.get(listPath), $.get(distPath)).done(function(listdata, graphdata) 
+      {
+        listimage = listdata[0].trim().split("\n");
         
-        //var N_TOTAL = listimage.length;
-        N_TOTAL = 15;
-
+        N_TOTAL = listimage.length;
         pool = new Pool(N_TOTAL);
-        label = initializeArray(0, N_TOTAL);
 
-        while (pool.getNremain() > 0) {
-          console.log("hello world!");
-          console.log(pool.getRandomAndRemove());
-          console.log("N: " + pool.getNremain());
-        }
+        // while(pool.getNremain() > 0) {
+        //   console.log("Out: " + pool.getRandomAndRemove());
+        //   console.log("Nremain: " + pool.getNremain())
+        // }
 
         // Setup UI
-        for (i = 0; i < N_BATCH; i++) {
+        for (var i = 0; i < N_BATCH; i++) {
           var tmp = pool.getRandomAndRemove();
           if (tmp < 0)
             return;
@@ -220,8 +279,26 @@ var controller = (function () {
             )
           )
         };
+
+        // ==========================================
+
+        var data = graphdata[0].trim().split("\n");
+
+        var neighbors = []
+        N_data = data.length;
+
+        if (N_data != N_TOTAL) {
+          throw new Error("List file and graph text must have same number " + N_TOTAL + "!=" + N_data)
+        }
+
+        for (var i = 0; i < N_data; i++) {
+          neighbors.push(data[i].trim().split(" "));
+        }
+        label = new Label(N_data, neighbors);
+
+        $("#labelTotal").text("Total images: " + N_TOTAL);
       })
-      
+
       $("#buttonNext").on("click", Next);
       $("#buttonSubmit").on("click", submit);
 
@@ -241,14 +318,6 @@ var controller = (function () {
       }); 
 
       Parse.initialize("q11aUUt7JFAjjr3vSHnCDUVi7xFDx0vYWTkGR4gA", "fR1i3W3vDMLkFCFqC57IFb0lP3Uc73whNPJhKz1w");
-    
-      // var TestObject = Parse.Object.extend("TestObject");
-      // var testObject = new TestObject();
-      // testObject.save({asdfasdf: "storing data file"}, {
-      //   success: function(object) {
-      //     alert("yay! it worked");
-      //   }
-      // });
 
     }
   }
